@@ -55,9 +55,9 @@ class Board
     WINNING_LINES.each do |line|
       squares = @squares.values_at(*line)
       if identical_markers?(2, squares) &&
-        squares.select(&:marked?).collect(&:marker).min == player_marker
-        return @squares.select{|k,v| line.include?(k) && 
-          v.marker == Square::INITIAL_MARKER}.keys.first
+         squares.select(&:marked?).collect(&:marker).min == player_marker
+        return @squares.select { |k, v| line.include?(k) && v.unmarked? }
+                       .keys.first
       end
     end
     nil
@@ -125,10 +125,9 @@ class Player
 end
 
 class TTTGame
-#  HUMAN_MARKER = "X"
- # COMPUTER_MARKER = "O"
- # FIRST_TO_MOVE = human.marker
- GAMES_TO_WIN = 3
+  FIRST_TO_MOVE = "Choose"
+  GAMES_TO_WIN = 5
+  COMPUTER_NAMES = ["Number 5", "Echo", "Hal", "R2D2", "Wall-E"]
 
   attr_reader :board, :human, :computer
 
@@ -136,26 +135,22 @@ class TTTGame
     @board = Board.new
     @human = Player.new
     @computer = Player.new
-    @first_turn = nil
     @current_marker = nil
   end
 
   def play
     display_welcome_message
     clear
-
     loop do
       loop do
-      display_board
+        display_board
         loop do
           current_player_moves
-          binding.pry
           break if board.someone_won? || board.full?
           clear_screen_and_display_board
         end
         display_result
-        keep_score
-        display_match_score
+        record_and_display_match_score
         break if someone_won_match?
         reset_after_game
       end
@@ -171,8 +166,24 @@ class TTTGame
   private
 
   def display_welcome_message
+    clear
     puts "Welcome to Tic Tac Toe!"
     puts "The first player to win 5 games wins the match."
+    assign_human_name
+    puts "Hello #{human.name}!"
+    human_chooses_marker
+    puts "OK, your marker is a #{human.marker}"
+    assign_computer_name
+    sleep 1
+    puts "Your opponent today is #{computer.name}."
+    determine_computer_marker
+    puts "#{computer.name}'s marker is a #{computer.marker}."
+    sleep 2
+    determine_first_player
+    sleep 1
+  end
+
+  def assign_human_name
     answer = nil
     puts "What is your name?"
     loop do
@@ -181,41 +192,57 @@ class TTTGame
       puts "Invalid response. Please enter a name:"
     end
     human.name = answer
-    puts "Hello #{human.name}!"
-    # answer = ''
-    human_chooses_marker
-    puts "Your marker is a #{human.marker}"
-    determine_computer_marker
-    puts "The computer's marker is a #{computer.marker}."
-    @first_turn = who_goes_first
-    puts ""
+  end
+
+  def assign_computer_name
+    computer.name = COMPUTER_NAMES.sample
+  end
+
+  def determine_first_player
+    @first_player = who_goes_first
+    @current_marker = @first_player
+    if @current_marker == human.marker
+      puts "You move first!"
+    else
+      puts "#{computer.name} moves first"
+    end
   end
 
   def human_chooses_marker
     answer = ''
-    puts "What marker would you like to use today? Choose X," +
-    " O, or any other single character."
+    puts "What marker would you like to use today?"
+    puts "Choose X, O, or any other single character."
     loop do
       answer = gets.chomp
       break if answer.chars.count { |char| char =~ /[\S]/ } == 1
-      "Invalid choice. Please choose one character for your marker."
+      puts "Invalid choice. Please choose one character for your marker."
     end
     human.marker = answer
   end
 
   def determine_computer_marker
-    human.marker.downcase == "x" ? computer.marker = "O" : computer.marker = "X"
+    computer.marker = if human.marker.downcase == "x"
+                        "O"
+                      else
+                        "X"
+                      end
   end
 
   def who_goes_first
-    answer = nil
-    loop do
-      puts "Would you like to go first? Answer y or n."
-      answer = gets.downcase.chomp
-      break if ['y', 'n'].include? answer
-      puts "Sorry, invalid response."
+    if FIRST_TO_MOVE == "Choose"
+      answer = nil
+      loop do
+        puts "Would you like to go first? Answer y or n."
+        answer = gets.downcase.chomp
+        break if ['y', 'n'].include? answer
+        puts "Sorry, invalid response."
+      end
+      answer == "y" ? human.marker : computer.marker
+    elsif FIRST_TO_MOVE == "Human"
+      human.marker
+    else
+      computer.marker
     end
-    answer == "y" ? @current_marker = human.marker : @current_marker = computer.marker
   end
 
   def display_goodbye_message
@@ -223,7 +250,7 @@ class TTTGame
   end
 
   def display_board
-    puts "You're a #{human.marker}. Computer is a #{computer.marker}"
+    puts "You're a #{human.marker}. #{computer.name} is a #{computer.marker}"
     puts ""
     board.draw
     puts ""
@@ -237,17 +264,17 @@ class TTTGame
   def joinor(array, delimiter=', ', word='or')
     case array.size
     when 0 then ''
-    when 1 then "#{array.first}"
-    when 2 
+    when 1 then array.first.to_s
+    when 2
       "#{array[0]} #{word} #{array[1]}"
     else
-      array[0, array.size - 1].join(delimiter) + 
-      "#{delimiter}#{word} #{array[-1]}"
+      array[0, array.size - 1].join(delimiter) +
+        "#{delimiter}#{word} #{array[-1]}"
     end
   end
 
   def human_moves
-    puts "Choose a square (#{joinor(board.unmarked_keys,', ')}): "
+    puts "Choose a square (#{joinor(board.unmarked_keys, ', ')}): "
     square = nil
 
     loop do
@@ -256,20 +283,28 @@ class TTTGame
       puts "Sorry, that's not a valid choice."
     end
     board[square] = human.marker
+    sleep 0.5
+  end
+
+  def computer_has_two_markers?
+    board.find_target_square(computer.marker)
+  end
+
+  def human_has_two_markers?
+    board.find_target_square(human.marker)
   end
 
   def computer_moves
-    sleep 0.5 if first_turn = human.marker
-    if board.find_target_square(computer.marker)
+    if computer_has_two_markers?
       board[board.find_target_square(computer.marker)] = computer.marker
-    elsif board.find_target_square(human.marker)
+    elsif human_has_two_markers?
       board[board.find_target_square(human.marker)] = computer.marker
     elsif board.square_five_free?
       board[5] = computer.marker
     else
       board[board.unmarked_keys.sample] = computer.marker
     end
-    sleep 0.5 if first_turn = computer.marker
+    sleep 0.5
   end
 
   def human_turn
@@ -296,7 +331,7 @@ class TTTGame
     when human.marker
       puts "You won this game!"
     when computer.marker
-      puts "The computer won this game!"
+      puts "#{computer.name} won this game!"
     else
       puts "It's a tie!"
     end
@@ -313,7 +348,12 @@ class TTTGame
 
   def display_match_score
     puts "The current score is:"
-    puts "#{human.name}: #{human.score}, Computer: #{computer.score}"
+    puts "#{human.name}: #{human.score}, #{computer.name}: #{computer.score}"
+  end
+
+  def record_and_display_match_score
+    keep_score
+    display_match_score
     sleep 1.5
   end
 
@@ -325,7 +365,7 @@ class TTTGame
     if human.won_match?
       puts "**Congratulations, #{human.name} won the match!**"
     elsif computer.won_match?
-      puts "**The computer won the match!**"
+      puts "**#{computer.name} won the match!**"
     end
   end
 
@@ -347,7 +387,7 @@ class TTTGame
 
   def reset_after_game
     board.reset
-    @current_marker = @first_turn
+    @current_marker = @first_player
     clear
   end
 
@@ -359,7 +399,8 @@ class TTTGame
 
   def display_play_again_message
     puts "Let's play again!"
-    puts ""
+    sleep 1
+    clear
   end
 end
 
