@@ -22,7 +22,7 @@ class Board
     puts "  #{@squares[7]}  |  #{@squares[8]}  |  #{@squares[9]}"
     puts "     |     |"
   end
-  # rubocop: enable Metrics/AbcSice
+  # rubocop: enable Metrics/AbcSize
 
   def []=(num, marker)
     @squares[num].marker = marker
@@ -115,7 +115,7 @@ class Player
   end
 
   def won_match?
-    self.score == TTTGame::GAMES_TO_WIN
+    score == TTTGame::GAMES_TO_WIN
   end
 
   def reset_score
@@ -137,6 +137,7 @@ class TTTGame
     @current_marker = nil
   end
 
+  # rubocop: disable Metrics/MethodLength
   def play
     display_welcome_message
     clear
@@ -145,22 +146,21 @@ class TTTGame
         display_board
         loop do
           current_player_moves
-          break if board.someone_won? || board.full?
+          break if game_over?
           clear_screen_and_display_board
         end
-        display_result
-        record_and_display_match_score
+        display_after_game_results_and_record_score
         break if someone_won_match?
         reset_after_game
       end
       display_winner
 
       break unless play_again?
-      reset_after_match
-      display_play_again_message
+      reset_and_display_message_after_match
     end
     display_goodbye_message
   end
+  # rubocop: enable Metrics/MethodLength
 
   private
 
@@ -171,23 +171,43 @@ class TTTGame
     assign_human_name
     puts "Hello #{human.name}!"
     human_chooses_marker
-    puts "OK, your marker is a #{human.marker}"
+    display_human_marker
     assign_computer_name
     sleep 1
     puts "Your opponent today is #{computer.name}."
     determine_computer_marker
-    puts "#{computer.name}'s marker is a #{computer.marker}."
-    sleep 2
+    display_computer_marker
     determine_first_player
     sleep 1
   end
 
+  def display_after_game_results_and_record_score
+    display_result
+    keep_score
+    display_match_score
+    sleep 2
+  end
+
+  def reset_and_display_message_after_match
+    reset_after_match
+    display_play_again_message
+  end
+
+  def display_computer_marker
+    puts "#{computer.name}'s marker is a #{computer.marker}."
+    sleep 2
+  end
+
+  def display_human_marker
+    puts "OK, your marker is a #{human.marker}"
+  end
+
   def assign_human_name
-    answer = nil
+    answer = ''
     puts "What is your name?"
     loop do
       answer = gets.chomp
-      break unless answer.empty?
+      break if answer.match(/\S+/)
       puts "Invalid response. Please enter a name:"
     end
     human.name = answer
@@ -229,19 +249,23 @@ class TTTGame
 
   def who_goes_first
     if FIRST_TO_MOVE == "Choose"
-      answer = nil
-      loop do
-        puts "Would you like to go first? Answer y or n."
-        answer = gets.downcase.chomp
-        break if ['y', 'n'].include? answer
-        puts "Sorry, invalid response."
-      end
-      answer == "y" ? human.marker : computer.marker
+      ask_user_order_preference
     elsif FIRST_TO_MOVE == "Human"
       human.marker
     else
       computer.marker
     end
+  end
+
+  def ask_user_order_preference
+    answer = nil
+    loop do
+      puts "Would you like to go first? Answer y or n."
+      answer = gets.downcase.chomp
+      break if ['y', 'n'].include? answer
+      puts "Sorry, invalid response."
+    end
+    answer == "y" ? human.marker : computer.marker
   end
 
   def display_goodbye_message
@@ -294,20 +318,33 @@ class TTTGame
   end
 
   def computer_moves
+    computer_marker = computer.marker
     if computer_has_two_markers?
-      board[board.find_target_square(computer.marker)] = computer.marker
+      board[winning_target_square] = computer_marker
     elsif human_has_two_markers?
-      board[board.find_target_square(human.marker)] = computer.marker
-    elsif board.square_five_free?
-      board[5] = computer.marker
+      board[defensive_target_square] = computer_marker
+    elsif square_five_empty?
+      board[5] = computer_marker
     else
-      board[board.unmarked_keys.sample] = computer.marker
+      board[random_unmarked_square] = computer_marker
     end
     sleep 0.5
   end
 
-  def human_turn
-    true
+  def winning_target_square
+    board.find_target_square(computer.marker)
+  end
+
+  def defensive_target_square
+    board.find_target_square(human.marker)
+  end
+
+  def random_unmarked_square
+    board.unmarked_keys.sample
+  end
+
+  def square_five_empty?
+    board.square_five_free?
   end
 
   def current_player_moves
@@ -336,6 +373,10 @@ class TTTGame
     end
   end
 
+  def game_over?
+    board.someone_won? || board.full?
+  end
+
   def keep_score
     case board.winning_marker
     when human.marker
@@ -348,12 +389,6 @@ class TTTGame
   def display_match_score
     puts "The current score is:"
     puts "#{human.name}: #{human.score}, #{computer.name}: #{computer.score}"
-  end
-
-  def record_and_display_match_score
-    keep_score
-    display_match_score
-    sleep 1.5
   end
 
   def someone_won_match?
@@ -381,7 +416,7 @@ class TTTGame
   end
 
   def clear
-    system 'clear'
+    system('clear') || system('cls')
   end
 
   def reset_after_game
