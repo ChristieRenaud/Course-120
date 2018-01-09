@@ -1,4 +1,3 @@
-require 'pry'
 module Hand
   def hit
     deck.deal(self)
