@@ -1,4 +1,3 @@
-require 'pry'
 
 class FixedArray
   attr_accessor :array
@@ -33,6 +32,29 @@ class FixedArray
 
   def to_s
     array.to_s
+  end
+end
+
+# Solution version
+class FixedArray
+  def initialize(max_size)
+    @array = Array.new(max_size)
+  end
+
+  def [](index)
+    @array.fetch(index)
+  end
+
+  def []=(index, value)
+    @array[index] = value
+  end
+
+  def to_a
+    @array.clone
+  end
+
+  def to_s
+    to_a.to_s
   end
 end
 
